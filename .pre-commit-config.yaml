@@ -71,7 +71,7 @@ repos:
     rev: 7d5a99253ae80435824463c9f36256e870041258 # frozen: v1.8.2
     hooks:
       - id: darglint2
-        exclude: ^(tests|integration_tests)
+        exclude: ^(docs|tests|integration_tests)
 
 # configuration for the pre-commit.ci bot
 # only relevant when actually using the bot
