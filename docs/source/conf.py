@@ -3,7 +3,6 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-
 import glob
 import importlib
 import inspect
@@ -15,9 +14,17 @@ import darglint2
 
 # -- Dynamic fields ----------------------------------------------------------
 
-branch = subprocess.check_output(
-    ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=os.path.dirname(__file__)
-).decode()
+# Determine branch
+process = subprocess.run(
+    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+    cwd=os.path.dirname(__file__),
+    stdout=subprocess.PIPE,
+)
+if process.returncode == 0:
+    branch = process.stdout.decode()
+else:
+    branch = "undefined"
+
 year = time.strftime("%Y")
 version = darglint2.__version__
 
@@ -82,7 +89,6 @@ myst_enable_extensions = [
     "tasklist",
 ]
 
-
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
@@ -91,7 +97,6 @@ html_static_path = ["_static"]
 
 # the html title is used for contructing the title show for the browser tab
 html_title = f"{project} {release}"
-
 
 html_css_files = [
     # add markers to external links
@@ -143,11 +148,10 @@ html_theme_options = {
 # sphinx_copybutton
 copybutton_exclude = ".linenos, .gp"  # exclude these elements from being copied
 
-
 # sphinx-multiversion
-smv_branch_whitelist = r"^master$|docs"  # branches build
-smv_tag_whitelist = r"^v\d+\.\d+\.\d+$"  # tags build
-smv_remote_whitelist = r"^(origin|upstream)$"  # remotes to get refs from
+smv_branch_whitelist = r"^(master|.*docs.*)$"  # branches build
+# smv_tag_whitelist = r"^v\d+\.\d+\.\d+$"  # tags build
+# smv_remote_whitelist = r"^(origin|upstream)$"  # remotes to get refs from
 
 # mock building docs with sphinx-multiversion
 mock_version = os.getenv("MOCK_VERSION")
@@ -160,7 +164,6 @@ if mock_version:
             "branches": [{"name": "docs"}, {"name": "main"}],
         },
     }
-
 
 # sphinx.ext.extlinks
 extlinks_detect_hardcoded_links = True
@@ -230,13 +233,13 @@ def edit_html(app, exception):
         raise exception
 
     for file in glob.glob(f"{app.outdir}/**/*.html", recursive=True):
-        with open(file, "r") as f:
+        with open(file, "r", errors="surrogateescape") as f:
             text = f.read()
 
         text = text.replace(
             '<a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>\'s', ""
         )
-        with open(file, "w") as f:
+        with open(file, "w", errors="surrogateescape") as f:
             f.write(text)
 
 
