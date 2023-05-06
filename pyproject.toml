@@ -59,6 +59,7 @@ sphinxext-opengraph = "^0.8.2"
 sphinx-autobuild = "^2021.3.14"
 sphinx-design = "^0.4.1"
 sphinx-multiversion = "^0.2.4"
+jinja2 = "^3.1.2"
 
 [tool.poetry.scripts]
 darglint2 = "darglint2.driver:main"
