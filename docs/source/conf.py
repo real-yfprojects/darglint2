@@ -6,24 +6,37 @@
 import glob
 import importlib
 import inspect
+import json
 import os
-import subprocess
 import time
+
+from sphinx_polyversion import GitRefDecoder
 
 import darglint2
 
-# -- Dynamic fields ----------------------------------------------------------
+# -- Polyversion script ------------------------------------------------------
 
-# Determine branch
-process = subprocess.run(
-    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-    cwd=os.path.dirname(__file__),
-    stdout=subprocess.PIPE,
-)
-if process.returncode == 0:
-    branch = process.stdout.decode()
-else:
-    branch = "undefined"
+mock_version = os.getenv("MOCK_VERSION")
+polyversion_raw = os.getenv("POLYVERSION_DATA")
+
+# mock building docs with sphinx-multiversion
+if mock_version:
+    html_context = {
+        "current": {"name": mock_version},
+        "latest": {"name": "v1.8.3"},
+        "tags": [{"name": "v1.8.3"}, {"name": "v1.5"}],
+        "branches": [{"name": "docs"}, {"name": "main"}],
+    }
+    branch = mock_version
+
+if polyversion_raw:
+    polyversion_data = json.loads(polyversion_raw, cls=GitRefDecoder)
+    html_context = polyversion_data
+    html_context["latest"] = max(polyversion_data["tags"], key=lambda r: r.date)
+    branch = polyversion_data["current"].name
+
+
+# -- Dynamic fields ----------------------------------------------------------
 
 year = time.strftime("%Y")
 version = darglint2.__version__
@@ -149,21 +162,9 @@ html_theme_options = {
 copybutton_exclude = ".linenos, .gp"  # exclude these elements from being copied
 
 # sphinx-multiversion
-smv_branch_whitelist = r"^(master|.*docs.*)$"  # branches build
+# smv_branch_whitelist = r"^(master|.*docs.*)$"  # branches build
 # smv_tag_whitelist = r"^v\d+\.\d+\.\d+$"  # tags build
 # smv_remote_whitelist = r"^(origin|upstream)$"  # remotes to get refs from
-
-# mock building docs with sphinx-multiversion
-mock_version = os.getenv("MOCK_VERSION")
-if mock_version:
-    html_context = {
-        "current_version": {"name": mock_version},
-        "latest_version": {"name": "v1.8.3"},
-        "versions": {
-            "tags": [{"name": "v1.8.3"}, {"name": "v1.5"}],
-            "branches": [{"name": "docs"}, {"name": "main"}],
-        },
-    }
 
 # sphinx.ext.extlinks
 extlinks_detect_hardcoded_links = True
