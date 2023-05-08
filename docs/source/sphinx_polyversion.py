@@ -1,20 +1,23 @@
+#!/usr/bin/env python3
 """
 Build sphinx docs in multiple versions.
 
 The versions are extracted from git, build and merged into one directory.
 """
 import argparse
+import asyncio
 import enum
 import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
+from asyncio.subprocess import DEVNULL, PIPE
 from datetime import datetime
 from pathlib import Path, PurePath
+from subprocess import CalledProcessError
 from typing import Any, Iterable, List, NamedTuple, Optional, Union, cast
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -80,20 +83,22 @@ class GitRefDecoder(json.JSONDecoder):
         return object
 
 
-def get_git_root(directory: Path):
+async def get_git_root(directory: Path):
     cmd = (
         "git",
         "rev-parse",
         "--show-toplevel",
     )
-    return Path(subprocess.check_output(cmd, cwd=directory).decode().rstrip("\n"))
+    process = await asyncio.create_subprocess_exec(*cmd, cwd=directory, stdout=PIPE)
+    out, err = await process.communicate()
+    return Path(out.decode().rstrip("\n"))
 
 
 regex_ref = r"refs/(?P<type>heads|tags|remotes/(?P<remote>[^/]+))/(?P<name>\S+)"
 pattern_ref = re.compile(regex_ref)
 
 
-def get_all_refs(repo: Path):
+async def get_all_refs(repo: Path):
     cmd = (
         "git",
         "for-each-ref",
@@ -101,7 +106,9 @@ def get_all_refs(repo: Path):
         "%(objectname)\t%(refname)\t%(creatordate:iso)",
         "refs",
     )
-    lines = subprocess.check_output(cmd).decode().splitlines()
+    process = await asyncio.create_subprocess_exec(*cmd, stdout=PIPE)
+    out, err = await process.communicate()
+    lines = out.decode().splitlines()
     for line in lines:
         obj, ref, date_str = line.split("\t")
         date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S %z")
@@ -126,28 +133,28 @@ def get_all_refs(repo: Path):
         yield GitRef(name, obj, ref, type_, date, remote)
 
 
-def get_refs(
+async def get_refs(
     repo: Path,
     branch_regex: str,
     tag_regex: str,
     remote: Optional[str] = None,
     files: Iterable[PurePath] = (),
 ):
-    def predicate(ref: GitRef):
+    async def predicate(ref: GitRef):
         match = True
         if ref.type == GitRefType.TAG:
             match = re.fullmatch(tag_regex, ref.name)
         if ref.type == GitRefType.BRANCH:
             match = re.fullmatch(branch_regex, ref.name)
         for file in files:
-            if not file_exists(repo, ref, file):
+            if not (await file_exists(repo, ref, file)):
                 return False
         return ref.remote == remote and match
 
     branches: List[GitRef] = []
     tags: List[GitRef] = []
-    for ref in get_all_refs(repo):
-        if not predicate(ref):
+    async for ref in get_all_refs(repo):
+        if not (await predicate(ref)):
             continue
         if ref.type == GitRefType.TAG:
             tags.append(ref)
@@ -163,26 +170,30 @@ def get_refs(
     return tags, branches
 
 
-def file_exists(repo: Path, ref: GitRef, file: PurePath):
+async def file_exists(repo: Path, ref: GitRef, file: PurePath):
     cmd = (
         "git",
         "cat-file",
         "-e",
         "{}:{}".format(ref.ref, file.as_posix()),
     )
-    return (
-        subprocess.run(
-            cmd, cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        ).returncode
-        == 0
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=repo,
+        stdout=DEVNULL,
+        stderr=DEVNULL,
     )
+    return (await process.wait()) == 0
 
 
-def copy_tree(repo: Path, ref: GitRef, dest: Union[str, Path], buffer_size=0):
+async def copy_tree(repo: Path, ref: GitRef, dest: Union[str, Path], buffer_size=0):
     # retrieve commit contents as tar archive
     cmd = ("git", "archive", "--format", "tar", ref.obj)
     with tempfile.SpooledTemporaryFile(max_size=buffer_size) as f:
-        subprocess.check_call(cmd, cwd=repo, stdout=f)
+        process = await asyncio.create_subprocess_exec(*cmd, cwd=repo, stdout=f)
+        rc = await process.wait()
+        if rc != 0:
+            raise CalledProcessError(f"Git archive returned {rc}")
         # extract tar archive to dir
         f.seek(0)
         with tarfile.open(fileobj=f) as tf:
@@ -200,21 +211,24 @@ def get_version_output_dir(output_dir: Path, ref: GitRef):
     return output_dir / ref.name
 
 
-def run_sphinx(
+async def run_sphinx(
     cwd: Path, source: Path, build: Path, metadata: dict, *, sphinx_args: Iterable[str]
 ):
-    cmd: List[str] = ["sphinx-build", str(source), str(build)]
+    cmd: List[str] = ["sphinx-build", "--color", str(source), str(build)]
     cmd += sphinx_args
     env = os.environ.copy()
     env["POLYVERSION_DATA"] = json.dumps(metadata, cls=GitRefEncoder)
     env["POLYVERSION_PATH"] = str(Path(__file__).absolute().resolve().parent)
-    process = subprocess.run(
-        cmd, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr
+    process = await asyncio.create_subprocess_exec(
+        *cmd, cwd=cwd, env=env, stdout=PIPE, stderr=PIPE
     )
-    return process
+    out, err = await process.communicate()
+    sys.stdout.write(out.decode())
+    sys.stderr.write(err.decode())
+    return process.returncode
 
 
-def build_version(
+async def build_version(
     repo: Path,
     rel_source: PurePath,
     output_dir: Path,
@@ -227,21 +241,18 @@ def build_version(
     with tempfile.TemporaryDirectory() as tmpdir_str:
         tmpdir = Path(tmpdir_str)
         # checkout object
-        copy_tree(repo, ref, tmpdir_str, buffer_size=buffer_size)
+        await copy_tree(repo, ref, tmpdir_str, buffer_size=buffer_size)
 
         # build
-        success = (
-            run_sphinx(
-                repo,
-                tmpdir / rel_source,
-                output_dir,
-                metadata,
-                sphinx_args=sphinx_args,
-            ).returncode
-            == 0
+        rc = await run_sphinx(
+            repo,
+            tmpdir / rel_source,
+            output_dir,
+            metadata,
+            sphinx_args=sphinx_args,
         )
 
-    return success
+    return rc == 0
 
 
 def shift_path(
@@ -271,7 +282,8 @@ def generate_root_dir(
     # generate dynamic files from jinja templates
     if template_dir.is_dir():
         env = Environment(
-            loader=FileSystemLoader(str(template_dir)), autoescape=select_autoescape()
+            loader=FileSystemLoader(str(template_dir)),
+            autoescape=select_autoescape(),
         )
         for template_path_str in env.list_templates():
             template = env.get_template(template_path_str)
@@ -302,19 +314,23 @@ def get_parser():
     return parser
 
 
-def main():
+async def identity(v):
+    return v
+
+
+async def main():
     parser = get_parser()
     options, sphinx_args = parser.parse_known_args()
 
     # determine git root
     source_dir = cast(Path, options.source_dir)
     output_dir = cast(Path, options.output_dir)
-    repo = get_git_root(source_dir)
+    repo = await get_git_root(source_dir)
 
     rel_source = source_dir.absolute().relative_to(repo)
 
     # determine, categorize and sort versions
-    tags, branches = get_refs(
+    tags, branches = await get_refs(
         repo, options.branch_regex, options.tag_regex, options.remote, [rel_source]
     )
 
@@ -325,13 +341,13 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # build local version
-    local_build_success = True
+    local_build = identity(True)
     if options.local:
         meta: dict = {
             "current": GitRef("local", "None", "None", GitRefType.TAG, datetime.now())
         }
         meta.update(global_metadata)
-        local_build_success = run_sphinx(
+        local_build = run_sphinx(
             repo,
             source_dir,
             output_dir / "local",
@@ -340,11 +356,12 @@ def main():
         )
 
     # run sphinx
+    build_coroutines = {}
     for version in tags + branches:
         print(f"Building {version.name}...")
         meta: dict = {"current": version}
         meta.update(global_metadata)
-        success = build_version(
+        build_coroutines[version] = build_version(
             repo,
             rel_source,
             output_dir / version.name,
@@ -354,6 +371,11 @@ def main():
             sphinx_args=sphinx_args,
         )
 
+    local_build_success, *results = await asyncio.gather(
+        local_build, *build_coroutines.values()
+    )
+
+    for version, success in zip(build_coroutines.keys(), results):
         if not success:
             print(f"Failed building {version.name}.", file=sys.stderr)
             if version in tags:
@@ -376,4 +398,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
