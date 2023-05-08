@@ -308,6 +308,18 @@ def main():
     # make output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # build local version
+    if options.local:
+        meta: dict = {"current": "local"}
+        meta.update(global_metadata)
+        success = run_sphinx(
+            repo,
+            source_dir,
+            output_dir / "local",
+            meta,
+            sphinx_args=sphinx_args,
+        )
+
     # run sphinx
     for version in tags + branches:
         print(f"Building {version.name}...")
@@ -330,17 +342,8 @@ def main():
             elif version in branches:
                 branches.remove(version)
 
-    # build local version
-    if options.local:
-        meta: dict = {"current": "local"}
-        meta.update(global_metadata)
-        run_sphinx(
-            repo,
-            source_dir,
-            output_dir / "local",
-            meta,
-            sphinx_args=sphinx_args,
-        )
+    if not (branches or tags):
+        raise RuntimeError("No version of the docs could be build successfully.")
 
     # root dir
     generate_root_dir(

@@ -8,7 +8,11 @@ import importlib
 import inspect
 import json
 import os
+import sys
 import time
+from importlib.util import module_from_spec, spec_from_file_location
+
+print(sys.path)
 
 from sphinx_polyversion import GitRefDecoder
 
@@ -17,9 +21,11 @@ import darglint2
 # -- Polyversion script ------------------------------------------------------
 
 mock_version = os.getenv("MOCK_VERSION")
+polyversion_path = os.getenv('POLYVERSION_PATH')
 polyversion_raw = os.getenv("POLYVERSION_DATA")
 
 # mock building docs with sphinx-multiversion
+branch = "undefined"
 if mock_version:
     html_context = {
         "current": {"name": mock_version},
@@ -28,6 +34,14 @@ if mock_version:
         "branches": [{"name": "docs"}, {"name": "main"}],
     }
     branch = mock_version
+
+# import polyversion
+if polyversion_path:
+    mod_name = 'sphinx_polyversion'
+    spec = spec_from_file_location(mod_name, polyversion_path)
+    mod = module_from_spec(spec)
+    sys.modules[mod_name] = mod
+    spec.loader.exec_module(mod)
 
 if polyversion_raw:
     polyversion_data = json.loads(polyversion_raw, cls=GitRefDecoder)
