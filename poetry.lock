@@ -1361,21 +1361,6 @@ theme-rtd = ["sphinx-rtd-theme (>=1.0,<2.0)"]
 theme-sbt = ["sphinx-book-theme (>=0.3.0,<0.4.0)"]
 
 [[package]]
-name = "sphinx-multiversion"
-version = "0.2.4"
-description = "Add support for multiple versions to sphinx"
-category = "dev"
-optional = false
-python-versions = "*"
-files = [
-    {file = "sphinx-multiversion-0.2.4.tar.gz", hash = "sha256:5cd1ca9ecb5eed63cb8d6ce5e9c438ca13af4fa98e7eb6f376be541dd4990bcb"},
-    {file = "sphinx_multiversion-0.2.4-py3-none-any.whl", hash = "sha256:dec29f2a5890ad68157a790112edc0eb63140e70f9df0a363743c6258fbeb478"},
-]
-
-[package.dependencies]
-sphinx = ">=2.1"
-
-[[package]]
 name = "sphinx-notfound-page"
 version = "0.8.3"
 description = "Sphinx extension to build a 404 page with absolute URLs"
@@ -1731,4 +1716,4 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=4.6)", "pytest-black (
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.7"
-content-hash = "b846fac4900807209fd75aba05e896639084407cd23bad3092e694cca8f4e3cf"
+content-hash = "967df3116e5604ab4dbc54568acf435b3aa5aa9c11d6a0e9a2eb7d50d9bd075c"

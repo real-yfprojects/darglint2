@@ -69,8 +69,6 @@ extensions = [
     "notfound.extension",
     # copy code button
     "sphinx_copybutton",
-    # version picker
-    "sphinx_multiversion",
     # include markdown files in docs
     "myst_parser",
     # tabs, badgets and more html widgets
