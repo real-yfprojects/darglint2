@@ -131,6 +131,7 @@ templates_path = [
     "_templates",
 ]
 
+
 # override sidebar contents to add `versioning.html`
 # The template uses data exposed by `sphinx-multiversion` to generate
 # a version selector that is show in the sidebar
@@ -161,15 +162,17 @@ html_theme_options = {
     ],
 }
 
+# disable localization
+locale_dirs = []
+
 # -- Extension Options -------------------------------------------------------
 
 # sphinx_copybutton
 copybutton_exclude = ".linenos, .gp"  # exclude these elements from being copied
 
-# sphinx-multiversion
-# smv_branch_whitelist = r"^(master|.*docs.*)$"  # branches build
-# smv_tag_whitelist = r"^v\d+\.\d+\.\d+$"  # tags build
-# smv_remote_whitelist = r"^(origin|upstream)$"  # remotes to get refs from
+# sphinx-opengraph
+ogp_site_url = "https://akaihola.github.io/darglint2"
+
 
 # sphinx.ext.extlinks
 extlinks_detect_hardcoded_links = True
