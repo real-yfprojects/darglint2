@@ -212,7 +212,7 @@ def get_version_output_dir(output_dir: Path, ref: GitRef):
 
 
 async def run_sphinx(
-    cwd: Path, source: Path, build: Path, metadata: dict, *, sphinx_args: Iterable[str]
+    source: Path, build: Path, metadata: dict, *, sphinx_args: Iterable[str]
 ):
     cmd: List[str] = ["sphinx-build", "--color", str(source), str(build)]
     cmd += sphinx_args
@@ -220,7 +220,7 @@ async def run_sphinx(
     env["POLYVERSION_DATA"] = json.dumps(metadata, cls=GitRefEncoder)
     env["POLYVERSION_PATH"] = str(Path(__file__).absolute().resolve().parent)
     process = await asyncio.create_subprocess_exec(
-        *cmd, cwd=cwd, env=env, stdout=PIPE, stderr=PIPE
+        *cmd, cwd=source, env=env, stdout=PIPE, stderr=PIPE
     )
     out, err = await process.communicate()
     sys.stdout.write(out.decode())
@@ -245,7 +245,6 @@ async def build_version(
 
         # build
         rc = await run_sphinx(
-            repo,
             tmpdir / rel_source,
             output_dir,
             metadata,
@@ -348,7 +347,6 @@ async def main():
         }
         meta.update(global_metadata)
         local_build = run_sphinx(
-            repo,
             source_dir,
             output_dir / "local",
             meta,
