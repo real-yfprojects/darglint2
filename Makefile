@@ -5,7 +5,7 @@ docs:
 
 .PHONY: docs-polyversion
 docs-polyversion:
-	poetry run python docs/sphinx_polyversion.py -a -v docs/source docs/build
+	poetry run python docs/sphinx_polyversion.py -a -v docs/source docs/build --poetry-groups docs
 
 .PHONY: lint
 lint:

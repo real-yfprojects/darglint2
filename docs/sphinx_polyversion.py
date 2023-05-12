@@ -211,12 +211,34 @@ def get_version_output_dir(output_dir: Path, ref: GitRef):
     return output_dir / ref.name
 
 
+async def create_poetry_env(project: Path, *, poetry_args: Iterable[str]):
+    cmd: List[str] = ["poetry", "install"]
+    cmd += poetry_args
+    env = os.environ.copy()
+    env.pop("VIRTUAL_ENV", None)  # unset poetry env
+    process = await asyncio.create_subprocess_exec(
+        *cmd, cwd=project, env=env, stdout=PIPE, stderr=PIPE
+    )
+    out, err = await process.communicate()
+    sys.stdout.write(out.decode())
+    sys.stderr.write(err.decode())
+    return process.returncode
+
+
 async def run_sphinx(
     source: Path, build: Path, metadata: dict, *, sphinx_args: Iterable[str]
 ):
-    cmd: List[str] = ["sphinx-build", "--color", str(source), str(build)]
+    cmd: List[str] = [
+        "poetry",
+        "run",
+        "sphinx-build",
+        "--color",
+        str(source.absolute()),
+        str(build.absolute()),
+    ]
     cmd += sphinx_args
     env = os.environ.copy()
+    env.pop("VIRTUAL_ENV", None)  # unset poetry env
     env["POLYVERSION_DATA"] = json.dumps(metadata, cls=GitRefEncoder)
     env["POLYVERSION_PATH"] = str(Path(__file__).absolute().resolve().parent)
     process = await asyncio.create_subprocess_exec(
@@ -237,6 +259,7 @@ async def build_version(
     *,
     buffer_size: int = 0,
     sphinx_args=(),
+    poetry_args=(),
 ):
     with tempfile.TemporaryDirectory() as tmpdir_str:
         tmpdir = Path(tmpdir_str)
@@ -244,6 +267,7 @@ async def build_version(
         await copy_tree(repo, ref, tmpdir_str, buffer_size=buffer_size)
 
         # build
+        await create_poetry_env(tmpdir, poetry_args=poetry_args)
         rc = await run_sphinx(
             tmpdir / rel_source,
             output_dir,
@@ -309,6 +333,7 @@ def get_parser():
     parser.add_argument("--buffer", default=10**8)
     parser.add_argument("--template_dir", type=Path)
     parser.add_argument("--static_dir", type=Path)
+    parser.add_argument("--poetry-groups", nargs="*")
 
     return parser
 
@@ -339,6 +364,9 @@ async def main():
     # make output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # poetry args used for building
+    poetry_args = ["--only", ",".join(options.poetry_groups)]
+
     # build local version
     local_build = identity(True)
     if options.local:
@@ -351,6 +379,7 @@ async def main():
             output_dir / "local",
             meta,
             sphinx_args=sphinx_args,
+            poetry_args=poetry_args,
         )
 
     # run sphinx
@@ -367,6 +396,7 @@ async def main():
             meta,
             buffer_size=options.buffer,
             sphinx_args=sphinx_args,
+            poetry_args=poetry_args,
         )
 
     local_build_success, *results = await asyncio.gather(
