@@ -1,0 +1,93 @@
+# Builds multiple versions of the Docs using the polyversion script
+name: Publish Docs
+
+on:
+  push:
+    branches:
+      - "master"
+
+  workflow_dispatch:
+    inputs:
+      branch-regex:
+        description: Python regex matching the branches to build the docs for
+        type: string
+      tag-regex:
+        description: Python regex matching the tags to build the docs for
+        type: string
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  publish-docs:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Checkout current ref to get the current version of the build script
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # Setup python + poetry
+      - name: Setup build deps
+        uses: ./.github/actions/setup
+        with:
+          install-options: --only docs
+
+      # Configure pages provides deployment URL
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
+      # Build
+      - name: Fetch tags and branches
+        run: git fetch -t origin
+
+      - name: Retrieve CPU core count
+        shell: python
+        continue-on-error: true
+        run: |
+          import os
+          with open(os.getenv('GITHUB_ENV'), 'a') as f:
+            f.write('cpu_cores=' + str(len(os.sched_getaffinity(0))))
+
+      - name: Process args
+        run: |
+          branch_regex='${{ inputs.branch-regex }}'
+          tag_regex='${{ inputs.tag-regex }}'
+          if [ -z "$tag_regex" ]; then tag_regex='v\d+.\d+.\d+'; fi
+          if [ -z "$branch_regex" ]; then branch_regex='master'; fi
+          echo branch_regex="$branch_regex" >> "$GITHUB_ENV"
+          echo tag_regex="$tag_regex" >> "$GITHUB_ENV"
+
+      - name: Build using `sphinx_polyversion`
+        run: >
+          poetry run
+          python docs/sphinx_polyversion.py
+          -a -v
+          docs/source
+          build
+          --poetry-groups docs
+          --tag_regex "${{ env.tag_regex }}"
+          --branch_regex "${{ env.branch_regex }}"
+
+      # Upload built docs
+      - name: Upload build artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: "build"
+          retention-days: 7
+
+      # Deploy uploaded artifact
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2

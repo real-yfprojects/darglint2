@@ -1,0 +1,58 @@
+name: Setup
+description: Sets up python and poetry
+
+# note:
+# this is a local composite action
+# documentation: https://docs.github.com/en/actions/creating-actions/creating-a-composite-action
+# code example: https://github.com/GuillaumeFalourd/poc-github-actions/blob/main/.github/actions/local-action/action.yaml
+
+inputs:
+  setup-pre-commit:
+    description: Whether pre-commit shall be setup, too
+    required: false
+    default: ""
+  install-options:
+    description: Additional arguments to pass to `poetry install`.
+    required: false
+    default: ""
+  python-version:
+    description: "The python version to install"
+    required: false
+    default: "3.10"
+
+runs:
+  using: "composite"
+  steps:
+    # Python+Poetry
+    # See https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#caching-
+    - name: Install poetry
+      run: pipx install poetry
+      shell: bash
+
+    - name: setup python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: "poetry"
+
+    # Install deps
+    - name: Install project dependencies
+      run: |
+        poetry install ${{ inputs.install-options }}
+      shell: bash
+
+    # Pre-commit
+    - name: Install pre-commit
+      if: ${{ inputs.setup-pre-commit }}
+      run: pipx install pre-commit
+      shell: bash
+    - name: Set PY variable
+      if: ${{ inputs.setup-pre-commit }}
+      run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
+      shell: bash
+    - name: Configure Caching for Pre-Commit
+      if: ${{ inputs.setup-pre-commit }}
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}
