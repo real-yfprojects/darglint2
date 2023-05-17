@@ -56,6 +56,7 @@ copyright = f"2023-{year} the Darglint2 developers"
 author = "Terrence Reilly"
 release = version
 repository = "https://github.com/akaihola/darglint2/"
+url = "https://akaihola.github.io/darglint2"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -171,7 +172,7 @@ locale_dirs = []
 copybutton_exclude = ".linenos, .gp"  # exclude these elements from being copied
 
 # sphinx-opengraph
-ogp_site_url = "https://akaihola.github.io/darglint2"
+ogp_site_url = url
 
 
 # sphinx.ext.extlinks
